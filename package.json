@@ -1,6 +1,6 @@
 {
   "name": "purescript-webpack-plugin",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "PureScript plugin for webpack",
   "license": "MIT",
   "repository": "ethul/purescript-webpack-plugin",

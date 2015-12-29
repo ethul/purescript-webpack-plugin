@@ -41,7 +41,7 @@ PurescriptWebpackPlugin.prototype.bundleModuleNames = function(){
 
   var moduleNames = entries.map(function(entry){
     var module_ = modules.filter(function(module_){
-      return module_.rawRequest === entry.request;
+      return module_.userRequest === entry.userRequest;
     });
 
     if (!module_[0]) return null;
@@ -162,8 +162,8 @@ PurescriptWebpackPlugin.prototype.apply = function(compiler){
   });
 
   compiler.plugin('normal-module-factory', function(normalModuleFactory){
-    normalModuleFactory.plugin('before-resolve', function(data, callback){
-      if (path.extname(data.request) === PURS) {
+    normalModuleFactory.plugin('after-resolve', function(data, callback){
+      if (path.extname(data.userRequest) === PURS) {
         plugin.context.bundleEntries.push(data);
       }
       callback(null, data);

@@ -6,6 +6,12 @@ var fs = require('fs');
 
 var child_process = require('child_process');
 
+var dependencyGraph = require('./dependency-graph');
+
+var dependencyMap = require('./dependency-map');
+
+var moduleParser = require('./module-parser');
+
 var PSC = 'psc';
 
 var PSC_BUNDLE = 'psc-bundle';
@@ -13,8 +19,6 @@ var PSC_BUNDLE = 'psc-bundle';
 var REQUIRE_PATH = '../';
 
 var PURS = '.purs';
-
-var MODULE_RE = /(?:^|\n)module\s+([\w\.]+)/;
 
 function PurescriptWebpackPlugin(options) {
   this.options = Object.assign({
@@ -32,6 +36,12 @@ function PurescriptWebpackPlugin(options) {
   }, options);
 
   this.context = {};
+
+  this.dependencySrcMap = dependencyMap.emptyMap();
+
+  this.dependencyFFIMap = dependencyMap.emptyMap();
+
+  this.dependencyGraph = dependencyGraph.emptyGraph();
 }
 
 PurescriptWebpackPlugin.prototype.bundleModuleNames = function(){
@@ -48,14 +58,9 @@ PurescriptWebpackPlugin.prototype.bundleModuleNames = function(){
     else {
       var file = module_[0].resource;
 
-      var contents = fs.readFileSync(file, {encoding: 'utf-8'});
+      var result = moduleParser.srcNameSync(file);
 
-      var match = contents.match(MODULE_RE);
-
-      if (match === null) return null;
-      else {
-        return match[1];
-      }
+      return result;
     }
   });
 
@@ -67,7 +72,7 @@ PurescriptWebpackPlugin.prototype.bundleModuleNames = function(){
 PurescriptWebpackPlugin.prototype.bundle = function(callback){
   var moduleNames = this.bundleModuleNames();
 
-  if (moduleNames.length === 0) callback("No entry point module names found.", null);
+  if (moduleNames.length === 0) callback(new Error("No entry point module names found."), null);
   else {
     var moduleArgs = moduleNames.reduce(function(b, a){ return b.concat(['-m', a]); }, []);
 
@@ -93,7 +98,7 @@ PurescriptWebpackPlugin.prototype.bundle = function(callback){
     });
 
     psc.on('close', function(code){
-      var error = code !== 0 ? stderr : null;
+      var error = code !== 0 ? new Error(stderr) : null;
       callback(error, stdout);
     });
   }
@@ -116,13 +121,86 @@ PurescriptWebpackPlugin.prototype.compile = function(callback){
   });
 
   psc.on('close', function(code){
-    var error = code !== 0 ? stderr : null;
+    var error = code !== 0 ? new Error(stderr) : null;
     callback(error);
+  });
+};
+
+PurescriptWebpackPlugin.prototype.updateDependencies = function(bundle, callback){
+  var plugin = this;
+
+  dependencyMap.insertSrcGlobs(plugin.options.src, dependencyMap.emptyMap(), function(error, srcMap){
+    if (error) callback(error);
+    else {
+      dependencyMap.insertFFIGlobs(plugin.options.ffi, dependencyMap.emptyMap(), function(error, ffiMap){
+        if (error) callback(error);
+        else {
+          dependencyGraph.insertFromBundle(bundle, plugin.options.bundleNamespace, dependencyGraph.emptyGraph(), function(error, graph){
+            if (error) callback(error);
+            else {
+              var dependencies = {
+                srcMap: srcMap,
+                ffiMap: ffiMap,
+                graph: graph
+              };
+
+              callback(null, dependencies);
+            }
+          });
+        }
+      });
+    }
   });
 };
 
 PurescriptWebpackPlugin.prototype.apply = function(compiler){
   var plugin = this;
+
+  function compile(options) {
+    return function(callback){
+      return function(){
+        var callbacks = plugin.context.callbacks;
+
+        callbacks.push(callback);
+
+        if (plugin.context.requiresCompiling) {
+          plugin.context.requiresCompiling = false;
+
+          plugin.compile(function(error){
+            var dependencies = {
+              srcMap: plugin.dependencySrcMap,
+              ffiMap: plugin.dependencyFFIMap,
+              graph: plugin.dependencyGraph
+            };
+
+            if (error) callbacks.forEach(function(callback){callback(error)(dependencies)()});
+            else {
+              plugin.bundle(function(error, result){
+                if (error) callbacks.forEach(function(callback){callback(error)(dependencies)()});
+                else {
+                  plugin.updateDependencies(result, function(error, dependencies_){
+                    plugin.dependencySrcMap = dependencies_.srcMap;
+
+                    plugin.dependencyFFIMap = dependencies_.ffiMap;
+
+                    plugin.dependencyGraph = dependencies_.graph;
+
+                    var result_ = result + 'module.exports = ' + plugin.options.bundleNamespace + ';';
+
+                    fs.writeFile(plugin.options.bundleOutput, result_, function(error_){
+                      callbacks.forEach(function(callback){
+                        callback(error_ || error)(dependencies_)()
+                      });
+                    });
+                  });
+                }
+              });
+            }
+          });
+        }
+      };
+    };
+  }
 
   compiler.plugin('compilation', function(compilation, params){
     Object.assign(plugin.context, {
@@ -130,27 +208,7 @@ PurescriptWebpackPlugin.prototype.apply = function(compiler){
       bundleEntries: [],
       callbacks: [],
       compilation: null,
-      compile: function(callback){
-        return function(){
-          var callbacks = plugin.context.callbacks;
-          callbacks.push(callback);
-
-          if (plugin.context.requiresCompiling) {
-            plugin.context.requiresCompiling = false;
-            plugin.compile(function(error){
-              if (error) callbacks.forEach(function(callback){callback(error)()});
-              else {
-                plugin.bundle(function(error, result){
-                  var result_ = result + 'module.exports = ' + plugin.options.bundleNamespace + ';';
-                  fs.writeFile(plugin.options.bundleOutput, result_, function(error_){
-                    callbacks.forEach(function(callback){callback(error_ || error)()});
-                  });
-                });
-              }
-            });
-          }
-        };
-      }
+      compile: compile(compilation.compiler.options)
     });
 
     compilation.plugin('normal-module-loader', function(loaderContext, module){

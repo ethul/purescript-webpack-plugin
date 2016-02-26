@@ -9,6 +9,15 @@
     "email": "thul.eric@gmail.com"
   },
   "files": [
-    "index.js"
-  ]
+    "index.js",
+    "dependency-graph.js",
+    "dependency-map.js",
+    "module-parser.js"
+  ],
+  "dependencies": {
+    "acorn": "^3.0.2",
+    "dependency-graph": "^0.4.1",
+    "globby": "^4.0.0",
+    "immutable": "^3.7.6"
+  }
 }

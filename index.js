@@ -6,6 +6,8 @@ var fs = require('fs');
 
 var child_process = require('child_process');
 
+var debug = require('debug')('purescript-webpack-plugin');
+
 var dependencyGraph = require('./dependency-graph');
 
 var dependencyMap = require('./dependency-map');
@@ -166,6 +168,8 @@ PurescriptWebpackPlugin.prototype.apply = function(compiler){
         if (plugin.context.requiresCompiling) {
           plugin.context.requiresCompiling = false;
 
+          debug('Compiling PureScript files');
+
           plugin.compile(function(error){
             var dependencies = {
               srcMap: plugin.dependencySrcMap,
@@ -175,15 +179,21 @@ PurescriptWebpackPlugin.prototype.apply = function(compiler){
 
             if (error) callbacks.forEach(function(callback){callback(error)(dependencies)()});
             else {
+              debug('Bundling compiled PureScript files');
+
               plugin.bundle(function(error, result){
                 if (error) callbacks.forEach(function(callback){callback(error)(dependencies)()});
                 else {
+                  debug('Updating dependency graph of PureScript bundle');
+
                   plugin.updateDependencies(result, function(error, dependencies_){
                     plugin.dependencySrcMap = dependencies_.srcMap;
 
                     plugin.dependencyFFIMap = dependencies_.ffiMap;
 
                     plugin.dependencyGraph = dependencies_.graph;
+
+                    debug('Generating result for webpack');
 
                     var result_ = result + 'module.exports = ' + plugin.options.bundleNamespace + ';';
 

@@ -131,22 +131,28 @@ PurescriptWebpackPlugin.prototype.compile = function(callback){
 PurescriptWebpackPlugin.prototype.updateDependencies = function(bundle, callback){
   var plugin = this;
 
+  var dependencies = {
+    srcMap: plugin.dependencySrcMap,
+    ffiMap: plugin.dependencyFFIMap,
+    graph: plugin.dependencyGraph
+  };
+
   dependencyMap.insertSrcGlobs(plugin.options.src, dependencyMap.emptyMap(), function(error, srcMap){
-    if (error) callback(error);
+    if (error) callback(error, dependencies);
     else {
       dependencyMap.insertFFIGlobs(plugin.options.ffi, dependencyMap.emptyMap(), function(error, ffiMap){
-        if (error) callback(error);
+        if (error) callback(error, dependencies);
         else {
           dependencyGraph.insertFromBundle(bundle, plugin.options.bundleNamespace, dependencyGraph.emptyGraph(), function(error, graph){
-            if (error) callback(error);
+            if (error) callback(error, dependencies);
             else {
-              var dependencies = {
+              var dependencies_ = {
                 srcMap: srcMap,
                 ffiMap: ffiMap,
                 graph: graph
               };
 
-              callback(null, dependencies);
+              callback(null, dependencies_);
             }
           });
         }

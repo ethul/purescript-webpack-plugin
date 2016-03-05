@@ -11,14 +11,17 @@
   "files": [
     "index.js",
     "dependency-graph.js",
-    "dependency-map.js",
-    "module-parser.js"
+    "module-map.js",
+    "module-parser.js",
+    "file-globber.js",
+    "modification-map.js"
   ],
   "dependencies": {
     "acorn": "^3.0.2",
     "debug": "^2.2.0",
     "dependency-graph": "^0.4.1",
     "globby": "^4.0.0",
-    "immutable": "^3.7.6"
+    "immutable": "^3.7.6",
+    "pinkie-promise": "^2.0.0"
   }
 }

@@ -8,9 +8,13 @@ var child_process = require('child_process');
 
 var debug = require('debug')('purescript-webpack-plugin');
 
-var dependencyGraph = require('./dependency-graph');
+var fileGlobber = require('./file-globber');
 
-var dependencyMap = require('./dependency-map');
+var modificationMap = require('./modification-map');
+
+var moduleMap = require('./module-map');
+
+var dependencyGraph = require('./dependency-graph');
 
 var moduleParser = require('./module-parser');
 
@@ -39,11 +43,15 @@ function PurescriptWebpackPlugin(options) {
 
   this.context = {};
 
-  this.dependencySrcMap = dependencyMap.emptyMap();
-
-  this.dependencyFFIMap = dependencyMap.emptyMap();
-
-  this.dependencyGraph = dependencyGraph.emptyGraph();
+  this.cache = {
+    srcFiles: [],
+    ffiFiles: [],
+    srcModificationMap: modificationMap.emptyMap(),
+    ffiModificationMap: modificationMap.emptyMap(),
+    srcModuleMap: moduleMap.emptyMap(),
+    ffiModuleMap: moduleMap.emptyMap(),
+    dependencyGraph: dependencyGraph.emptyGraph()
+  };
 }
 
 PurescriptWebpackPlugin.prototype.bundleModuleNames = function(){
@@ -131,28 +139,65 @@ PurescriptWebpackPlugin.prototype.compile = function(callback){
 PurescriptWebpackPlugin.prototype.updateDependencies = function(bundle, callback){
   var plugin = this;
 
-  var dependencies = {
-    srcMap: plugin.dependencySrcMap,
-    ffiMap: plugin.dependencyFFIMap,
-    graph: plugin.dependencyGraph
-  };
+  var options = plugin.options;
 
-  dependencyMap.insertSrcGlobs(plugin.options.src, dependencyMap.emptyMap(), function(error, srcMap){
-    if (error) callback(error, dependencies);
+  var cache = plugin.cache;
+
+  plugin.scanFiles(function(error, result){
+    moduleMap.insertSrc(result.srcFiles, cache.srcModuleMap, cache.srcModificationMap, result.srcModificationMap, function(error, srcMap){
+      if (error) callback(error, cache);
+      else {
+        moduleMap.insertFFI(result.ffiFiles, cache.ffiModuleMap, cache.ffiModificationMap, result.ffiModificationMap, function(error, ffiMap){
+          if (error) callback(error, cache);
+          else {
+            dependencyGraph.insertFromBundle(bundle, options.bundleNamespace, dependencyGraph.emptyGraph(), function(error, graph){
+              if (error) callback(error, cache);
+              else {
+                var result_ = {
+                  srcFiles: result.srcFiles,
+                  ffiFiles: result.ffiFiles,
+                  srcModificationMap: result.srcModificationMap,
+                  ffiModificationMap: result.ffiModificationMap,
+                  srcModuleMap: srcMap,
+                  ffiModuleMap: ffiMap,
+                  dependencyGraph: graph
+                };
+
+                callback(null, result_);
+              }
+            });
+          }
+        });
+      }
+    });
+  });
+};
+
+PurescriptWebpackPlugin.prototype.scanFiles = function(callback){
+  var plugin = this;
+
+  fileGlobber.glob(plugin.options.src, function(error, srcs){
+    if (error) callback(error, null);
     else {
-      dependencyMap.insertFFIGlobs(plugin.options.ffi, dependencyMap.emptyMap(), function(error, ffiMap){
-        if (error) callback(error, dependencies);
+      fileGlobber.glob(plugin.options.ffi, function(error, ffis){
+        if (error) callback(error, null);
         else {
-          dependencyGraph.insertFromBundle(bundle, plugin.options.bundleNamespace, dependencyGraph.emptyGraph(), function(error, graph){
-            if (error) callback(error, dependencies);
+          modificationMap.insert(srcs, modificationMap.emptyMap(), function(error, srcMap){
+            if (error) callback(error, null);
             else {
-              var dependencies_ = {
-                srcMap: srcMap,
-                ffiMap: ffiMap,
-                graph: graph
-              };
+              modificationMap.insert(ffis, modificationMap.emptyMap(), function(error, ffiMap){
+                if (error) callback(error, null);
+                else {
+                  var result = {
+                    srcFiles: srcs,
+                    ffiFiles: ffis,
+                    srcModificationMap: srcMap,
+                    ffiModificationMap: ffiMap
+                  };
 
-              callback(null, dependencies_);
+                  callback(null, result);
+                }
+              });
             }
           });
         }
@@ -171,42 +216,48 @@ PurescriptWebpackPlugin.prototype.apply = function(compiler){
 
         callbacks.push(callback);
 
+        var invokeCallbacks = function(error, result){
+          callbacks.forEach(function(callback){
+            callback(error)(result)()
+          });
+        };
+
+        var cache = {
+          srcMap: plugin.cache.srcModuleMap,
+          ffiMap: plugin.cache.ffiModuleMap,
+          graph: plugin.cache.dependencyGraph
+        };
+
         if (plugin.context.requiresCompiling) {
           plugin.context.requiresCompiling = false;
 
           debug('Compiling PureScript files');
 
           plugin.compile(function(error){
-            var dependencies = {
-              srcMap: plugin.dependencySrcMap,
-              ffiMap: plugin.dependencyFFIMap,
-              graph: plugin.dependencyGraph
-            };
-
-            if (error) callbacks.forEach(function(callback){callback(error)(dependencies)()});
+            if (error) invokeCallbacks(error, cache);
             else {
               debug('Bundling compiled PureScript files');
 
-              plugin.bundle(function(error, result){
-                if (error) callbacks.forEach(function(callback){callback(error)(dependencies)()});
+              plugin.bundle(function(error, bundle){
+                if (error) invokeCallbacks(error, cache);
                 else {
                   debug('Updating dependency graph of PureScript bundle');
 
-                  plugin.updateDependencies(result, function(error, dependencies_){
-                    plugin.dependencySrcMap = dependencies_.srcMap;
+                  plugin.updateDependencies(bundle, function(error, result){
+                    var cache_ = {
+                      srcMap: result.srcModuleMap,
+                      ffiMap: result.ffiModuleMap,
+                      graph: result.dependencyGraph
+                    };
 
-                    plugin.dependencyFFIMap = dependencies_.ffiMap;
-
-                    plugin.dependencyGraph = dependencies_.graph;
+                    Object.assign(plugin.cache, result);
 
                     debug('Generating result for webpack');
 
-                    var result_ = result + 'module.exports = ' + plugin.options.bundleNamespace + ';';
+                    var bundle_ = bundle + 'module.exports = ' + plugin.options.bundleNamespace + ';';
 
-                    fs.writeFile(plugin.options.bundleOutput, result_, function(error_){
-                      callbacks.forEach(function(callback){
-                        callback(error_ || error)(dependencies_)()
-                      });
+                    fs.writeFile(plugin.options.bundleOutput, bundle_, function(error_){
+                      invokeCallbacks(error_ || error, cache_);
                     });
                   });
                 }

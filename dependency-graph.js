@@ -9,8 +9,12 @@ var dependencyGraph = require('dependency-graph');
 function onAssignmentExpression(namespace) {
   function handler(node, state) {
     if (node.operator === '=') {
-      if (node.left.type === 'MemberExpression' && node.left.object.name === namespace) {
-        if (node.right.type === 'LogicalExpression' && node.right.left.object.name === namespace) {
+      if (node.left && node.left.object &&
+          node.left.type === 'MemberExpression' &&
+          node.left.object.name === namespace) {
+        if (node.right && node.right.left && node.right.left.object &&
+            node.right.type === 'LogicalExpression' &&
+            node.right.left.object.name === namespace) {
           var value = node.left.property.value;
           if (!state.modules[value]) {
             state.modules[value] = state.cache;
@@ -33,7 +37,8 @@ function onAssignmentExpression(namespace) {
 
 function onVariableDeclarator(namespace) {
   function handler(node, state) {
-    if (node.id.type === 'Identifier' &&
+    if (node.id && node.init && node.init.object && node.init.property &&
+        node.id.type === 'Identifier' &&
         node.init.type === 'MemberExpression' &&
         node.init.object.type === 'Identifier' &&
         node.init.object.name === namespace) {

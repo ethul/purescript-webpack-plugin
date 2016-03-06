@@ -6,6 +6,8 @@ var fs = require('fs');
 
 var child_process = require('child_process');
 
+var dargs = require('dargs');
+
 var debug = require('debug')('purescript-webpack-plugin');
 
 var fileGlobber = require('./file-globber');
@@ -17,10 +19,6 @@ var moduleMap = require('./module-map');
 var dependencyGraph = require('./dependency-graph');
 
 var moduleParser = require('./module-parser');
-
-var PSC = 'psc';
-
-var PSC_BUNDLE = 'psc-bundle';
 
 var REQUIRE_PATH = '../';
 
@@ -38,7 +36,11 @@ function PurescriptWebpackPlugin(options) {
     ],
     output: 'output',
     bundleOutput: path.join('output', 'bundle.js'),
-    bundleNamespace: 'PS'
+    bundleNamespace: 'PS',
+    psc: 'psc',
+    pscArgs: {},
+    pscBundle: 'psc-bundle',
+    pscBundleArgs: {}
   }, options);
 
   this.context = {};
@@ -84,30 +86,33 @@ PurescriptWebpackPlugin.prototype.bundle = function(callback){
 
   if (moduleNames.length === 0) callback(new Error("No entry point module names found."), null);
   else {
-    var moduleArgs = moduleNames.reduce(function(b, a){ return b.concat(['-m', a]); }, []);
+    var args = Object.assign({}, this.options.pscBundleArgs, {
+      module: moduleNames,
+      namespace: this.options.bundleNamespace,
+      requirePath: REQUIRE_PATH,
+      _:  [
+        path.join(this.options.output, '**', 'index.js'),
+        path.join(this.options.output, '**', 'foreign.js')
+      ]
+    });
 
-    var args = moduleArgs.concat([
-      '-n', this.options.bundleNamespace,
-      '-r', REQUIRE_PATH,
-      path.join(this.options.output, '**', 'index.js'),
-      path.join(this.options.output, '**', 'foreign.js')
-    ]);
+    var args_ = dargs(args);
 
-    var psc = child_process.spawn(PSC_BUNDLE, args);
+    var pscBundle = child_process.spawn(this.options.pscBundle, args_);
 
     var stdout = '';
 
     var stderr = '';
 
-    psc.stdout.on('data', function(data){
+    pscBundle.stdout.on('data', function(data){
       stdout = stdout + data.toString();
     });
 
-    psc.stderr.on('data', function(data){
+    pscBundle.stderr.on('data', function(data){
       stderr = stderr + data.toString();
     });
 
-    psc.on('close', function(code){
+    pscBundle.on('close', function(code){
       var error = code !== 0 ? new Error(stderr) : null;
       callback(error, stdout);
     });
@@ -115,14 +120,16 @@ PurescriptWebpackPlugin.prototype.bundle = function(callback){
 };
 
 PurescriptWebpackPlugin.prototype.compile = function(callback){
-  var ffiArgs = this.options.ffi.reduce(function(b, a){ return b.concat(['-f', a]); }, []);
+  var args = Object.assign({}, this.options.pscArgs, {
+    ffi: this.options.ffi,
+    output: this.options.output,
+    requirePath: REQUIRE_PATH,
+    _: this.options.src
+  });
 
-  var args = ffiArgs.concat([
-    '-o', this.options.output,
-    '-r', REQUIRE_PATH
-  ]).concat(this.options.src);
+  var args_ = dargs(args);
 
-  var psc = child_process.spawn(PSC, args);
+  var psc = child_process.spawn(this.options.psc, args_);
 
   var stderr = '';
 
@@ -132,7 +139,7 @@ PurescriptWebpackPlugin.prototype.compile = function(callback){
 
   psc.on('close', function(code){
     var error = code !== 0 ? new Error(stderr) : null;
-    callback(error);
+    callback(error, stderr);
   });
 };
 
@@ -225,7 +232,8 @@ PurescriptWebpackPlugin.prototype.apply = function(compiler){
         var cache = {
           srcMap: plugin.cache.srcModuleMap,
           ffiMap: plugin.cache.ffiModuleMap,
-          graph: plugin.cache.dependencyGraph
+          graph: plugin.cache.dependencyGraph,
+          output: ''
         };
 
         if (plugin.context.requiresCompiling) {
@@ -233,7 +241,7 @@ PurescriptWebpackPlugin.prototype.apply = function(compiler){
 
           debug('Compiling PureScript files');
 
-          plugin.compile(function(error){
+          plugin.compile(function(error, output){
             if (error) invokeCallbacks(error, cache);
             else {
               debug('Bundling compiled PureScript files');
@@ -247,7 +255,8 @@ PurescriptWebpackPlugin.prototype.apply = function(compiler){
                     var cache_ = {
                       srcMap: result.srcModuleMap,
                       ffiMap: result.ffiModuleMap,
-                      graph: result.dependencyGraph
+                      graph: result.dependencyGraph,
+                      output: output
                     };
 
                     Object.assign(plugin.cache, result);

@@ -18,6 +18,7 @@
   ],
   "dependencies": {
     "acorn": "^3.0.2",
+    "dargs": "^4.1.0",
     "debug": "^2.2.0",
     "dependency-graph": "^0.4.1",
     "globby": "^4.0.0",

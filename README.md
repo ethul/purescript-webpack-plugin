@@ -32,6 +32,22 @@ Specifies the PureScript bundle output path. The default value is `output/bundle
 
 Specifies the PureScript bundle namespace. The default value is `PS`.
 
+###### `psc` (String)
+
+Specifies the PureScript psc command. The default value is `psc`.
+
+###### `pscArgs` (Object)
+
+Specifies additional PureScript psc arguments. The default value is `{}`. The format of the arguments object follows [dargs](https://www.npmjs.com/package/dargs).
+
+###### `pscBundle` (String)
+
+Specifies the PureScript psc-bundle command. The default value is `psc-bundle`.
+
+###### `pscBundleArgs` (Object)
+
+Specifies additional PureScript psc-bundle arguments. The default value is `{}`. The format of the arguments object follows [dargs](https://www.npmjs.com/package/dargs).
+
 ## Example
 
 Refer to the [purs-loader](https://www.npmjs.com/package/purs-loader) for an example.

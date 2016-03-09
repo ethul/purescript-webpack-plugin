@@ -38,10 +38,13 @@ function PurescriptWebpackPlugin(options) {
     ],
     output: 'output',
     bundleOutput: path.join('output', 'bundle.js'),
-    bundleNamespace: 'PS'
+    bundleNamespace: 'PS',
+    bundle: true
   }, options);
 
-  this.context = {};
+  this.context = {
+    options: this.options
+  };
 
   this.cache = {
     srcFiles: [],
@@ -206,68 +209,73 @@ PurescriptWebpackPlugin.prototype.scanFiles = function(callback){
   });
 };
 
-PurescriptWebpackPlugin.prototype.apply = function(compiler){
+PurescriptWebpackPlugin.prototype.contextCompile = function(callback){
   var plugin = this;
 
-  function compile(options) {
-    return function(callback){
-      return function(){
-        var callbacks = plugin.context.callbacks;
+  return function(){
+    var callbacks = plugin.context.callbacks;
 
-        callbacks.push(callback);
+    callbacks.push(callback);
 
-        var invokeCallbacks = function(error, result){
-          callbacks.forEach(function(callback){
-            callback(error)(result)()
-          });
-        };
+    var invokeCallbacks = function(error, result){
+      callbacks.forEach(function(callback){
+        callback(error)(result)()
+      });
+    };
 
-        var cache = {
-          srcMap: plugin.cache.srcModuleMap,
-          ffiMap: plugin.cache.ffiModuleMap,
-          graph: plugin.cache.dependencyGraph
-        };
+    var cache = {
+      srcMap: plugin.cache.srcModuleMap,
+      ffiMap: plugin.cache.ffiModuleMap,
+      graph: plugin.cache.dependencyGraph
+    };
 
-        if (plugin.context.requiresCompiling) {
-          plugin.context.requiresCompiling = false;
+    if (plugin.context.requiresCompiling) {
+      plugin.context.requiresCompiling = false;
 
-          debug('Compiling PureScript files');
+      debug('Compiling PureScript files');
 
-          plugin.compile(function(error){
+      plugin.compile(function(error){
+        if (error) invokeCallbacks(error, cache);
+        else if (plugin.options.bundle) {
+          debug('Bundling compiled PureScript files');
+
+          plugin.bundle(function(error, bundle){
             if (error) invokeCallbacks(error, cache);
             else {
-              debug('Bundling compiled PureScript files');
+              debug('Updating dependency graph of PureScript bundle');
 
-              plugin.bundle(function(error, bundle){
-                if (error) invokeCallbacks(error, cache);
-                else {
-                  debug('Updating dependency graph of PureScript bundle');
+              plugin.updateDependencies(bundle, function(error, result){
+                var cache_ = {
+                  srcMap: result.srcModuleMap,
+                  ffiMap: result.ffiModuleMap,
+                  graph: result.dependencyGraph
+                };
 
-                  plugin.updateDependencies(bundle, function(error, result){
-                    var cache_ = {
-                      srcMap: result.srcModuleMap,
-                      ffiMap: result.ffiModuleMap,
-                      graph: result.dependencyGraph
-                    };
+                Object.assign(plugin.cache, result);
 
-                    Object.assign(plugin.cache, result);
+                debug('Generating result for webpack');
 
-                    debug('Generating result for webpack');
+                var bundle_ = bundle + 'module.exports = ' + plugin.options.bundleNamespace + ';';
 
-                    var bundle_ = bundle + 'module.exports = ' + plugin.options.bundleNamespace + ';';
-
-                    fs.writeFile(plugin.options.bundleOutput, bundle_, function(error_){
-                      invokeCallbacks(error_ || error, cache_);
-                    });
-                  });
-                }
+                fs.writeFile(plugin.options.bundleOutput, bundle_, function(error_){
+                  invokeCallbacks(error_ || error, cache_);
+                });
               });
             }
           });
         }
-      };
-    };
-  }
+        else {
+          debug('Skipped bundling of compiled PureScript files');
+
+          invokeCallbacks(null, cache);
+        }
+      });
+    }
+  };
+};
+
+PurescriptWebpackPlugin.prototype.apply = function(compiler){
+  var plugin = this;
 
   compiler.plugin('compilation', function(compilation, params){
     Object.assign(plugin.context, {
@@ -275,7 +283,7 @@ PurescriptWebpackPlugin.prototype.apply = function(compiler){
       bundleEntries: [],
       callbacks: [],
       compilation: null,
-      compile: compile(compilation.compiler.options)
+      compile: plugin.contextCompile.bind(plugin)
     });
 
     compilation.plugin('normal-module-loader', function(loaderContext, module){

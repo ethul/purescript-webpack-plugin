@@ -48,6 +48,10 @@ Specifies the PureScript psc-bundle command. The default value is `psc-bundle`.
 
 Specifies additional PureScript psc-bundle arguments. The default value is `{}`. The format of the arguments object follows [dargs](https://www.npmjs.com/package/dargs).
 
+###### `bundle` (Boolean)
+
+Specifies whether PureScript bundle is used. The default value is `true`.
+
 ## Example
 
 Refer to the [purs-loader](https://www.npmjs.com/package/purs-loader) for an example.

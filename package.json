@@ -1,6 +1,6 @@
 {
   "name": "purescript-webpack-plugin",
-  "version": "0.2.0-beta.3",
+  "version": "0.2.0-beta.4",
   "description": "PureScript plugin for webpack",
   "license": "MIT",
   "repository": "ethul/purescript-webpack-plugin",
@@ -14,13 +14,14 @@
     "module-map.js",
     "module-parser.js",
     "file-globber.js",
-    "modification-map.js"
+    "modification-map.js",
+    "require-map.js"
   ],
   "dependencies": {
-    "acorn": "^3.0.2",
     "dargs": "^4.1.0",
     "debug": "^2.2.0",
     "dependency-graph": "^0.4.1",
+    "detective": "^4.3.1",
     "globby": "^4.0.0",
     "immutable": "^3.7.6",
     "pinkie-promise": "^2.0.0"

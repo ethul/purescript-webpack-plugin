@@ -42,7 +42,7 @@ function PurescriptWebpackPlugin(options) {
     psc: 'psc',
     pscArgs: {},
     pscBundle: 'psc-bundle',
-    pscBundleArgs: {}
+    pscBundleArgs: {},
     bundle: true
   }, options);
 
@@ -244,9 +244,9 @@ PurescriptWebpackPlugin.prototype.contextCompile = function(callback){
 
     callbacks.push(callback);
 
-    var invokeCallbacks = function(error, result){
+    var invokeCallbacks = function(error, graph, output){
       callbacks.forEach(function(callback){
-        callback(error)(result)()
+        callback(error)(graph)(output)()
       });
     };
 
@@ -255,8 +255,8 @@ PurescriptWebpackPlugin.prototype.contextCompile = function(callback){
 
       debug('Compiling PureScript files');
 
-      plugin.compile(function(error){
-        if (error) invokeCallbacks(error, plugin.cache.dependencyGraph);
+      plugin.compile(function(error, output){
+        if (error) invokeCallbacks(error, plugin.cache.dependencyGraph, output);
         else {
           debug('Updating dependency graph of PureScript bundle');
 
@@ -265,17 +265,17 @@ PurescriptWebpackPlugin.prototype.contextCompile = function(callback){
 
             debug('Generating result for webpack');
 
-            if (!plugin.options.bundle) invokeCallbacks(error, plugin.cache.dependencyGraph);
+            if (!plugin.options.bundle) invokeCallbacks(error, plugin.cache.dependencyGraph, output);
             else {
               debug('Bundling compiled PureScript files');
 
               plugin.bundle(function(error, bundle){
-                if (error) invokeCallbacks(error, plugin.cache.dependencyGraph);
+                if (error) invokeCallbacks(error, plugin.cache.dependencyGraph, output);
                 else {
                   var bundle_ = bundle + 'module.exports = ' + plugin.options.bundleNamespace + ';';
 
                   fs.writeFile(plugin.options.bundleOutput, bundle_, function(error_){
-                    invokeCallbacks(error_ || error, plugin.cache.dependencyGraph);
+                    invokeCallbacks(error_ || error, plugin.cache.dependencyGraph, output);
                   });
                 }
               });

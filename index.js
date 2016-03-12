@@ -14,6 +14,8 @@ var modificationMap = require('./modification-map');
 
 var moduleMap = require('./module-map');
 
+var requireMap = require('./require-map');
+
 var dependencyGraph = require('./dependency-graph');
 
 var moduleParser = require('./module-parser');
@@ -38,18 +40,23 @@ function PurescriptWebpackPlugin(options) {
     ],
     output: 'output',
     bundleOutput: path.join('output', 'bundle.js'),
-    bundleNamespace: 'PS'
+    bundleNamespace: 'PS',
+    bundle: true
   }, options);
 
-  this.context = {};
+  this.context = {
+    options: this.options
+  };
 
   this.cache = {
     srcFiles: [],
     ffiFiles: [],
+    outputFiles: [],
     srcModificationMap: modificationMap.emptyMap(),
     ffiModificationMap: modificationMap.emptyMap(),
     srcModuleMap: moduleMap.emptyMap(),
     ffiModuleMap: moduleMap.emptyMap(),
+    requireMap: requireMap.emptyMap(),
     dependencyGraph: dependencyGraph.emptyGraph()
   };
 }
@@ -136,66 +143,41 @@ PurescriptWebpackPlugin.prototype.compile = function(callback){
   });
 };
 
-PurescriptWebpackPlugin.prototype.updateDependencies = function(bundle, callback){
+PurescriptWebpackPlugin.prototype.updateDependencies = function(callback){
   var plugin = this;
-
-  var options = plugin.options;
 
   var cache = plugin.cache;
 
   plugin.scanFiles(function(error, result){
-    moduleMap.insertSrc(result.srcFiles, cache.srcModuleMap, cache.srcModificationMap, result.srcModificationMap, function(error, srcMap){
-      if (error) callback(error, cache);
-      else {
-        moduleMap.insertFFI(result.ffiFiles, cache.ffiModuleMap, cache.ffiModificationMap, result.ffiModificationMap, function(error, ffiMap){
-          if (error) callback(error, cache);
-          else {
-            dependencyGraph.insertFromBundle(bundle, options.bundleNamespace, dependencyGraph.emptyGraph(), function(error, graph){
-              if (error) callback(error, cache);
-              else {
-                var result_ = {
-                  srcFiles: result.srcFiles,
-                  ffiFiles: result.ffiFiles,
-                  srcModificationMap: result.srcModificationMap,
-                  ffiModificationMap: result.ffiModificationMap,
-                  srcModuleMap: srcMap,
-                  ffiModuleMap: ffiMap,
-                  dependencyGraph: graph
-                };
-
-                callback(null, result_);
-              }
-            });
-          }
-        });
-      }
-    });
-  });
-};
-
-PurescriptWebpackPlugin.prototype.scanFiles = function(callback){
-  var plugin = this;
-
-  fileGlobber.glob(plugin.options.src, function(error, srcs){
-    if (error) callback(error, null);
+    if (error) callback(error, cache);
     else {
-      fileGlobber.glob(plugin.options.ffi, function(error, ffis){
-        if (error) callback(error, null);
+      moduleMap.insertSrc(result.srcFiles, cache.srcModuleMap, cache.srcModificationMap, result.srcModificationMap, function(error, srcMap){
+        if (error) callback(error, cache);
         else {
-          modificationMap.insert(srcs, modificationMap.emptyMap(), function(error, srcMap){
-            if (error) callback(error, null);
+          moduleMap.insertFFI(result.ffiFiles, cache.ffiModuleMap, cache.ffiModificationMap, result.ffiModificationMap, function(error, ffiMap){
+            if (error) callback(error, cache);
             else {
-              modificationMap.insert(ffis, modificationMap.emptyMap(), function(error, ffiMap){
-                if (error) callback(error, null);
+              requireMap.insertOutput(result.outputFiles, cache.requireMap, srcMap, ffiMap, cache.srcModificationMap, result.srcModificationMap, cache.ffiModificationMap, result.ffiModificationMap, function(error, requireMap) {
+                if (error) callback(error, cache);
                 else {
-                  var result = {
-                    srcFiles: srcs,
-                    ffiFiles: ffis,
-                    srcModificationMap: srcMap,
-                    ffiModificationMap: ffiMap
-                  };
+                  dependencyGraph.insertFromOutput(result.outputFiles, requireMap, srcMap, ffiMap, dependencyGraph.emptyGraph(), function(error, graph){
+                    if (error) callback(error, cache);
+                    else {
+                      var result_ = {
+                        srcFiles: result.srcFiles,
+                        ffiFiles: result.ffiFiles,
+                        outputFiles: result.outputFiles,
+                        srcModificationMap: result.srcModificationMap,
+                        ffiModificationMap: result.ffiModificationMap,
+                        srcModuleMap: srcMap,
+                        ffiModuleMap: ffiMap,
+                        requireMap: requireMap,
+                        dependencyGraph: graph
+                      };
 
-                  callback(null, result);
+                      callback(null, result_);
+                    }
+                  });
                 }
               });
             }
@@ -206,68 +188,100 @@ PurescriptWebpackPlugin.prototype.scanFiles = function(callback){
   });
 };
 
-PurescriptWebpackPlugin.prototype.apply = function(compiler){
+PurescriptWebpackPlugin.prototype.scanFiles = function(callback){
   var plugin = this;
 
-  function compile(options) {
-    return function(callback){
-      return function(){
-        var callbacks = plugin.context.callbacks;
+  var outputGlob = path.join(plugin.options.output, '**', '*.js');
 
-        callbacks.push(callback);
-
-        var invokeCallbacks = function(error, result){
-          callbacks.forEach(function(callback){
-            callback(error)(result)()
-          });
-        };
-
-        var cache = {
-          srcMap: plugin.cache.srcModuleMap,
-          ffiMap: plugin.cache.ffiModuleMap,
-          graph: plugin.cache.dependencyGraph
-        };
-
-        if (plugin.context.requiresCompiling) {
-          plugin.context.requiresCompiling = false;
-
-          debug('Compiling PureScript files');
-
-          plugin.compile(function(error){
-            if (error) invokeCallbacks(error, cache);
+  fileGlobber.glob(plugin.options.src, function(error, srcs){
+    if (error) callback(error, null);
+    else {
+      fileGlobber.glob(plugin.options.ffi, function(error, ffis){
+        if (error) callback(error, null);
+        else {
+          fileGlobber.glob([outputGlob], function(error, output){
+            if (error) callback(error, null);
             else {
-              debug('Bundling compiled PureScript files');
-
-              plugin.bundle(function(error, bundle){
-                if (error) invokeCallbacks(error, cache);
+              modificationMap.insert(srcs, modificationMap.emptyMap(), function(error, srcMap){
+                if (error) callback(error, null);
                 else {
-                  debug('Updating dependency graph of PureScript bundle');
+                  modificationMap.insert(ffis, modificationMap.emptyMap(), function(error, ffiMap){
+                    if (error) callback(error, null);
+                    else {
+                      var result = {
+                        srcFiles: srcs,
+                        ffiFiles: ffis,
+                        outputFiles: output,
+                        srcModificationMap: srcMap,
+                        ffiModificationMap: ffiMap
+                      };
 
-                  plugin.updateDependencies(bundle, function(error, result){
-                    var cache_ = {
-                      srcMap: result.srcModuleMap,
-                      ffiMap: result.ffiModuleMap,
-                      graph: result.dependencyGraph
-                    };
-
-                    Object.assign(plugin.cache, result);
-
-                    debug('Generating result for webpack');
-
-                    var bundle_ = bundle + 'module.exports = ' + plugin.options.bundleNamespace + ';';
-
-                    fs.writeFile(plugin.options.bundleOutput, bundle_, function(error_){
-                      invokeCallbacks(error_ || error, cache_);
-                    });
+                      callback(null, result);
+                    }
                   });
                 }
               });
             }
           });
         }
-      };
+      });
+    }
+  });
+};
+
+PurescriptWebpackPlugin.prototype.contextCompile = function(callback){
+  var plugin = this;
+
+  return function(){
+    var callbacks = plugin.context.callbacks;
+
+    callbacks.push(callback);
+
+    var invokeCallbacks = function(error, result){
+      callbacks.forEach(function(callback){
+        callback(error)(result)()
+      });
     };
-  }
+
+    if (plugin.context.requiresCompiling) {
+      plugin.context.requiresCompiling = false;
+
+      debug('Compiling PureScript files');
+
+      plugin.compile(function(error){
+        if (error) invokeCallbacks(error, plugin.cache.dependencyGraph);
+        else {
+          debug('Updating dependency graph of PureScript bundle');
+
+          plugin.updateDependencies(function(error, result){
+            Object.assign(plugin.cache, result);
+
+            debug('Generating result for webpack');
+
+            if (!plugin.options.bundle) invokeCallbacks(error, plugin.cache.dependencyGraph);
+            else {
+              debug('Bundling compiled PureScript files');
+
+              plugin.bundle(function(error, bundle){
+                if (error) invokeCallbacks(error, plugin.cache.dependencyGraph);
+                else {
+                  var bundle_ = bundle + 'module.exports = ' + plugin.options.bundleNamespace + ';';
+
+                  fs.writeFile(plugin.options.bundleOutput, bundle_, function(error_){
+                    invokeCallbacks(error_ || error, plugin.cache.dependencyGraph);
+                  });
+                }
+              });
+            }
+          });
+        }
+      });
+    }
+  };
+};
+
+PurescriptWebpackPlugin.prototype.apply = function(compiler){
+  var plugin = this;
 
   compiler.plugin('compilation', function(compilation, params){
     Object.assign(plugin.context, {
@@ -275,7 +289,7 @@ PurescriptWebpackPlugin.prototype.apply = function(compiler){
       bundleEntries: [],
       callbacks: [],
       compilation: null,
-      compile: compile(compilation.compiler.options)
+      compile: plugin.contextCompile.bind(plugin)
     });
 
     compilation.plugin('normal-module-loader', function(loaderContext, module){

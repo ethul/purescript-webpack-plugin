@@ -32,6 +32,10 @@ Specifies the PureScript bundle output path. The default value is `output/bundle
 
 Specifies the PureScript bundle namespace. The default value is `PS`.
 
+###### `bundle` (Boolean)
+
+Specifies whether PureScript bundle is used. The default value is `true`.
+
 ## Example
 
 Refer to the [purs-loader](https://www.npmjs.com/package/purs-loader) for an example.

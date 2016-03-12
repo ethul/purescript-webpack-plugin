@@ -40,7 +40,8 @@ function insert(files, map, callback) {
           });
         });
       });
-    }, Promise.resolve(map));
+    }, Promise.resolve(map))
+  ;
 
   promise.then(
     function(result){callback(null, result)},

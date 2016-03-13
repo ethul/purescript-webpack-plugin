@@ -103,7 +103,9 @@ PurescriptWebpackPlugin.prototype.bundle = function(callback){
       ]
     });
 
-    var args_ = dargs(args);
+    var args_ = dargs(args, {ignoreFalse: true});
+
+    debug('Spawning %s %o', this.options.pscBundle, args_);
 
     var pscBundle = child_process.spawn(this.options.pscBundle, args_);
 
@@ -134,7 +136,9 @@ PurescriptWebpackPlugin.prototype.compile = function(callback){
     _: this.options.src
   });
 
-  var args_ = dargs(args);
+  var args_ = dargs(args, {ignoreFalse: true});
+
+  debug('Spawning %s %o', this.options.psc, args_);
 
   var psc = child_process.spawn(this.options.psc, args_);
 
@@ -245,8 +249,11 @@ PurescriptWebpackPlugin.prototype.contextCompile = function(callback){
     callbacks.push(callback);
 
     var invokeCallbacks = function(error, graph, output){
+      process.stderr.setEncoding('utf-8');
+      process.stderr.write(output);
+
       callbacks.forEach(function(callback){
-        callback(error)(graph)(output)()
+        callback(error)(graph)();
       });
     };
 

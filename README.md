@@ -54,4 +54,4 @@ Specifies whether PureScript bundle is used. The default value is `true`.
 
 ## Example
 
-Refer to the [purs-loader](https://www.npmjs.com/package/purs-loader) for an example.
+Refer to the [purescript-webpack-example](https://github.com/ethul/purescript-webpack-example) for an example.

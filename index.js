@@ -4,7 +4,7 @@ var path = require('path');
 
 var fs = require('fs');
 
-var child_process = require('child_process');
+var child_process = require('cross-spawn-async');
 
 var dargs = require('dargs');
 

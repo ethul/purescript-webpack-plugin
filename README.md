@@ -52,6 +52,13 @@ Specifies additional PureScript psc-bundle arguments. The default value is `{}`.
 
 Specifies whether PureScript bundle is used. The default value is `true`.
 
+###### `useOutputAsError` (Boolean)
+
+Use the compiler output as the error message passed to webpack.
+By default, a simple "PureScript compilation has failed." error is passed to
+webpack and the compiler output is written to stderr. This default behavior is
+undesirable if the compiler output is needed by webpack or webpack plugins.
+
 ## Example
 
 Refer to the [purescript-webpack-example](https://github.com/ethul/purescript-webpack-example) for an example.

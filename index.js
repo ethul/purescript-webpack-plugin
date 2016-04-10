@@ -249,8 +249,8 @@ PurescriptWebpackPlugin.prototype.contextCompile = function(callback){
     callbacks.push(callback);
 
     var invokeCallbacks = function(error, graph, output){
-      process.stderr.setEncoding('utf-8');
-      process.stderr.write(output);
+      plugin.context.output = output;
+      plugin.context.error = error;
 
       callbacks.forEach(function(callback){
         callback(error)(graph)();
@@ -321,6 +321,18 @@ PurescriptWebpackPlugin.prototype.apply = function(compiler){
       }
       callback(null, data);
     });
+  });
+
+  compiler.plugin('after-compile', function(compilation, callback){
+    if (plugin.context.output) {
+      compilation.warnings.push('Compiler output\n\n' + plugin.context.output);
+    }
+
+    if (plugin.context.error) {
+      compilation.errors.push('Compiler error\n\n' + plugin.context.error);
+    }
+
+    callback();
   });
 };
 

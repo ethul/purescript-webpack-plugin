@@ -325,11 +325,11 @@ PurescriptWebpackPlugin.prototype.apply = function(compiler){
 
   compiler.plugin('after-compile', function(compilation, callback){
     if (plugin.context.output) {
-      compilation.warnings.push('Compiler output\n\n' + plugin.context.output);
+      compilation.warnings.push('Compilation Result\n\n' + plugin.context.output);
     }
 
     if (plugin.context.error) {
-      compilation.errors.push('Compiler error\n\n' + plugin.context.error);
+      compilation.errors.push('Compilation Result\n\n' + plugin.context.error);
     }
 
     callback();

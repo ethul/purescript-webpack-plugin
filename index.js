@@ -245,12 +245,18 @@ PurescriptWebpackPlugin.prototype.contextCompile = function(callback){
 
   return function(){
     var callbacks = plugin.context.callbacks;
+    var compilation = plugin.context.compilation;
 
     callbacks.push(callback);
 
-    var invokeCallbacks = function(error, graph, output){
-      plugin.context.output = output;
-      plugin.context.error = error;
+    var invokeCallbacks = function(error, graph, output) {
+      if (output) {
+        compilation.warnings.push('Compilation Result\n\n' + output);
+      }
+
+      if (error) {
+        compilation.errors.push('Compilation Result\n\n' + error);
+      }
 
       callbacks.forEach(function(callback){
         callback(error)(graph)();
@@ -321,18 +327,6 @@ PurescriptWebpackPlugin.prototype.apply = function(compiler){
       }
       callback(null, data);
     });
-  });
-
-  compiler.plugin('after-compile', function(compilation, callback){
-    if (plugin.context.output) {
-      compilation.warnings.push('Compilation Result\n\n' + plugin.context.output);
-    }
-
-    if (plugin.context.error) {
-      compilation.errors.push('Compilation Result\n\n' + plugin.context.error);
-    }
-
-    callback();
   });
 };
 

@@ -323,13 +323,24 @@ PurescriptWebpackPlugin.prototype.apply = function(compiler){
     });
   });
 
+  compiler.plugin('watch-run', function(watching, callback){
+    plugin.context.isWatch = true;
+    callback();
+  });
+
   compiler.plugin('after-compile', function(compilation, callback){
     if (plugin.context.output) {
       compilation.warnings.push('Compilation Result\n\n' + plugin.context.output);
+      if (!plugin.context.isWatch) {
+        plugin.context.output = null;
+      }
     }
 
     if (plugin.context.error) {
       compilation.errors.push('Compilation Result\n\n' + plugin.context.error);
+      if (!plugin.context.isWatch) {
+        plugin.context.error = null;
+      }
     }
 
     callback();

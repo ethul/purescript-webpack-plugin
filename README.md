@@ -2,6 +2,10 @@
 
 > [PureScript](http://www.purescript.org) plugin for [webpack](http://webpack.github.io)
 
+## Deprecation
+
+As of the [purs-loader@1.0.0](https://github.com/ethul/purs-loader/releases/tag/1.0.0) this plugin is no longer necessary and is considered to be deprecated.
+
 ## Install
 
 Install with [npm](https://npmjs.org/package/purescript-webpack-plugin).
